@@ -9,20 +9,6 @@ import os from 'os';
 import ini from 'ini';
 import fetch from 'node-fetch';
 import axios from 'axios';
-function runCommand(command) {
-    try {
-        execSync(command, { stdio: 'inherit' });
-    } catch (error) {
-        console.error(chalk.red(`❌ Error: ${error.message}`));
-        process.exit(1);
-    }
-}
-
-// Helper function to validate GitHub repository URL
-function validateGitHubUrl(url) {
-    const githubRegex = /^(https:\/\/github.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+)(.git)?$/;
-    return githubRegex.test(url);
-}
 
 // helper function to run shell commands
 function runCommand(command) {
@@ -32,17 +18,17 @@ function runCommand(command) {
     } catch (error) {
         console.error(chalk.red(`❌ Command failed: ${command}`));
         console.error(error.message);
-        process.exit(1);  // exit on failure
+        process.exit(1);
     }
 }
 
-// helper function to validate GitHub URL
+// Helper function to validate GitHub repository URL
 function validateGitHubUrl(url) {
     const gitHubUrlPattern = /^https:\/\/github\.com\/[\w-]+\/[\w-]+$/;
     return gitHubUrlPattern.test(url);
 }
 
-// git repo here (initialize repo)
+// git repo initialization and connection to GitHub
 program.command('git repo here')
     .description('Initialize Git and connect to GitHub')
     .action(() => {
@@ -69,16 +55,16 @@ program.command('git repo here')
             }
         }
 
-        // Check for .env file and warn user
+        // check for .env file and warn user
         if (fs.existsSync('.env')) {
             console.log(chalk.yellow('⚠ Warning: Your project contains a .env file, which may contain sensitive information.'));
             const confirm = readlineSync.question(chalk.yellow('Should we add .env to .gitignore? (y/n): '));
             if (confirm.toLowerCase() === 'y') {
-                // Check if .gitignore exists, create it if not
+                // check if .gitignore exists, create it if not
                 if (!fs.existsSync('.gitignore')) {
                     fs.writeFileSync('.gitignore', '');
                 }
-                // Add .env to .gitignore
+                // add .env to .gitignore
                 fs.appendFileSync('.gitignore', '\n.env\n');
                 console.log(chalk.green('✅ Added .env to .gitignore.'));
             } else {
@@ -138,7 +124,6 @@ program.command('get coding time')
             console.log(chalk.red(`❌ Failed to fetch data: ${error.message}`));
         }
     });
-
 
 // todo list
 const tasksFile = `${os.homedir()}/.helper-tasks.json`;
@@ -202,8 +187,8 @@ program.command('remove task')
         console.log(chalk.green(`✅ Removed task: "${removedTask}"`));
     });
 
-    // is this ai?
-    const aiConfigPath = `${os.homedir()}/.helper-ai.cfg`;
+// ai stuff
+const aiConfigPath = `${os.homedir()}/.helper-ai.cfg`;
 
 function getApiKey() {
     if (fs.existsSync(aiConfigPath)) {
