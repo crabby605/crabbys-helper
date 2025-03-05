@@ -8,6 +8,7 @@ import fs from 'fs';
 import os from 'os';
 import ini from 'ini';
 import fetch from 'node-fetch';
+import axios from 'axios';
 function runCommand(command) {
     try {
         execSync(command, { stdio: 'inherit' });
