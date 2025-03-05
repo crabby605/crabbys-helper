@@ -1,6 +1,6 @@
 {
   "name": "crabbys-helper",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "A CLI app to help you learn Git and automate basic tasks",
   "main": "index.js",
@@ -18,9 +18,11 @@
   "license": "ISC",
   "preferGlobal": true,
   "dependencies": {
+    "buffer": "^6.0.3",
     "chalk": "^5.3.0",
     "commander": "^11.1.0",
-    "readline-sync": "^1.4.10",
-    "ini": "^2.0.0"
+    "ini": "^2.0.0",
+    "node-fetch": "^3.3.2",
+    "readline-sync": "^1.4.10"
   }
 }

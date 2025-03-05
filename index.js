@@ -7,7 +7,7 @@ import readlineSync from 'readline-sync';
 import fs from 'fs';
 import os from 'os';
 import ini from 'ini';
-
+import fetch from 'node-fetch';
 function runCommand(command) {
     try {
         execSync(command, { stdio: 'inherit' });
@@ -17,86 +17,68 @@ function runCommand(command) {
     }
 }
 
-// git maker
-program.command('git here')
+// Helper function to validate GitHub repository URL
+function validateGitHubUrl(url) {
+    const githubRegex = /^(https:\/\/github.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+)(.git)?$/;
+    return githubRegex.test(url);
+}
+
+// git maker (initialize repo)
+program.command('git repo here')
     .description('Initialize Git and connect to GitHub')
     .action(() => {
-        runCommand('git init');
-        console.log(chalk.green('✅ Git has been initialized!'));
-
-        const repoUrl = readlineSync.question('🌍 Enter your GitHub repo URL (or leave blank to skip): ');
-        if (repoUrl) {
-            runCommand(`git remote add origin ${repoUrl}`);
-            console.log(chalk.green('✅ Connected to GitHub!'));
-        }
-    });
-
-// git file adder
-program.command('git add')
-    .description('Choose which files to add to Git')
-    .action(() => {
-        const files = fs.readdirSync('.').filter(file => fs.lstatSync(file).isFile());
-
-        if (files.length === 0) {
-            console.log(chalk.yellow('⚠ No files found to add.'));
-            return;
+        try {
+            execSync('git rev-parse --is-inside-work-tree', { stdio: 'ignore' });
+            console.log(chalk.yellow('⚠ Git is already initialized.'));
+        } catch {
+            runCommand('git init');
+            console.log(chalk.green('✅ Git has been initialized!'));
         }
 
-        console.log(chalk.blue('📂 Select files to add (comma-separated or type "all"):'));
-        files.forEach((file, index) => console.log(`${index + 1}) ${file}`));
-
-        let fileInput = readlineSync.question('Files: ');
-        let selectedFiles = [];
-
-        if (fileInput.toLowerCase() === 'all') {
-            selectedFiles = files;
-        } else {
-            const indices = fileInput.split(',').map(i => parseInt(i.trim(), 10) - 1);
-            selectedFiles = indices.map(i => files[i]).filter(f => f);
-        }
-
-        if (selectedFiles.length === 0) {
-            console.log(chalk.red('❌ No valid files selected.'));
-            return;
-        }
-
-        // warn on .env
-        if (selectedFiles.includes('.env')) {
-            const confirm = readlineSync.question(chalk.yellow('⚠ Warning: .env contains sensitive info. Remove it? (y/n): '));
-            if (confirm.toLowerCase() === 'y') {
-                selectedFiles = selectedFiles.filter(f => f !== '.env');
+        try {
+            const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
+            console.log(chalk.yellow(`⚠ Remote already exists: ${remoteUrl}`));
+        } catch {
+            const repoUrl = readlineSync.question('🌍 Enter your GitHub repo URL (or leave blank to skip): ');
+            if (repoUrl) {
+                if (!validateGitHubUrl(repoUrl)) {
+                    console.log(chalk.red('❌ Invalid GitHub repository URL. Please enter a valid URL.'));
+                    return;
+                }
+                runCommand(`git remote add origin ${repoUrl}`);
+                console.log(chalk.green(`✅ Connected to GitHub! Remote set to ${repoUrl}`));
             }
         }
-
-        runCommand(`git add ${selectedFiles.join(' ')}`);
-        console.log(chalk.green(`✅ Added: ${selectedFiles.join(', ')}`));
     });
 
-// commiter
+    // git commit cmd
 program.command('git commit')
-    .description('Commit changes with a custom message')
+    .description('Commit changes with a custom message and handle .env safely')
     .action(() => {
+        // ask for commit message
         const commitMessage = readlineSync.question('📝 Enter commit message: ');
         if (!commitMessage.trim()) {
             console.log(chalk.red('❌ Commit message cannot be empty.'));
             return;
         }
+
+        // check for .env file and warn user (for people like me)
+        if (fs.existsSync('.env')) {
+            const confirm = readlineSync.question(chalk.yellow('⚠ Warning: .env contains sensitive info. Add it to .gitignore? (y/n): '));
+            if (confirm.toLowerCase() === 'y') {
+                fs.appendFileSync('.gitignore', '\n.env\n');
+                console.log(chalk.green('✅ Added .env to .gitignore.'));
+            }
+        }
+        runCommand('git add .');
         runCommand(`git commit -m "${commitMessage}"`);
         console.log(chalk.green(`✅ Changes committed: "${commitMessage}"`));
     });
 
-// push
-program.command('git push')
-    .description('Push changes to GitHub')
-    .action(() => {
-        runCommand('git push -u origin main');
-        console.log(chalk.green('🚀 Changes pushed to GitHub!'));
-    });
-
 // waka
-program.command('get time')
+program.command('get coding time')
     .description('Fetch WakaTime coding stats')
-    .action(() => {
+    .action(async () => {
         const wakatimeConfigPath = `${os.homedir()}/.wakatime.cfg`;
 
         if (!fs.existsSync(wakatimeConfigPath)) {
@@ -105,16 +87,39 @@ program.command('get time')
         }
 
         const config = ini.parse(fs.readFileSync(wakatimeConfigPath, 'utf-8'));
-        const apiKey = config?.settings?.api_key;
+        const apiKey = config?.settings?.api_key?.trim();
 
         if (!apiKey) {
             console.log(chalk.red('❌ API key missing in ~/.wakatime.cfg'));
             return;
         }
 
+        const encodedKey = Buffer.from(`${apiKey}`).toString('base64');
+        const url = "https://waka.hackclub.com/api/compat/wakatime/v1/users/current/all_time_since_today";
+
         console.log(chalk.blue('⌛ Fetching your coding stats...'));
-        runCommand(`curl -s -H "Authorization: Basic $(echo -n ${apiKey} | base64)" "https://wakatime.com/api/v1/users/current/summaries?range=last_7_days"`);
+
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    "Authorization": `Basic ${encodedKey}`,
+                    "Content-Type": "application/json"
+                }
+            });
+
+            if (!response.ok) {
+                console.log(chalk.red(`❌ API Error: ${response.status} ${response.statusText}`));
+                return;
+            }
+
+            const data = await response.json();
+            console.log(chalk.green('✅ Your coding stats for today:'));
+            console.log(`⏳ Time Tracked: ${data.data.text}`);
+        } catch (error) {
+            console.log(chalk.red(`❌ Failed to fetch data: ${error.message}`));
+        }
     });
+
 
 // todo list
 const tasksFile = `${os.homedir()}/.helper-tasks.json`;
@@ -128,7 +133,7 @@ function saveTasks(tasks) {
     fs.writeFileSync(tasksFile, JSON.stringify(tasks, null, 2));
 }
 
-program.command('tasks')
+program.command('task list')
     .description('View all tasks')
     .action(() => {
         const tasks = loadTasks();
@@ -140,7 +145,7 @@ program.command('tasks')
         }
     });
 
-program.command('add-task')
+program.command('add task')
     .description('Add a new task')
     .action(() => {
         const task = readlineSync.question('📝 Enter task: ');
@@ -154,7 +159,7 @@ program.command('add-task')
         console.log(chalk.green(`✅ Task added: "${task}"`));
     });
 
-program.command('remove-task')
+program.command('remove task')
     .description('Remove a task')
     .action(() => {
         const tasks = loadTasks();
@@ -176,6 +181,63 @@ program.command('remove-task')
         const removedTask = tasks.splice(taskIndex, 1);
         saveTasks(tasks);
         console.log(chalk.green(`✅ Removed task: "${removedTask}"`));
+    });
+
+    // is this ai?
+    const aiConfigPath = `${os.homedir()}/.helper-ai.cfg`;
+
+function getApiKey() {
+    if (fs.existsSync(aiConfigPath)) {
+        const config = ini.parse(fs.readFileSync(aiConfigPath, 'utf-8'));
+        return config?.settings?.api_key?.trim();
+    }
+    return null;
+}
+
+program.command('ask ai')
+    .description('Ask OpenAI a question')
+    .action(async () => {
+        let apiKey = getApiKey();
+
+        if (!apiKey) {
+            apiKey = readlineSync.question('🔑 Enter your OpenAI API Key: ', { hideEchoBack: true });
+            if (!apiKey.trim()) {
+                console.log(chalk.red('❌ API Key is required.'));
+                return;
+            }
+
+            const saveKey = readlineSync.question('💾 Save API key for future use? (y/n): ');
+            if (saveKey.toLowerCase() === 'y') {
+                fs.writeFileSync(aiConfigPath, `[settings]\napi_key=${apiKey}\n`);
+                console.log(chalk.green('✅ API key saved.'));
+            }
+        }
+
+        const userQuestion = readlineSync.question('🤖 What do you want to ask AI?: ');
+        if (!userQuestion.trim()) {
+            console.log(chalk.red('❌ Question cannot be empty.'));
+            return;
+        }
+
+        console.log(chalk.blue('⌛ Getting AI response...'));
+
+        try {
+            const response = await axios.post(
+                'https://api.openai.com/v1/chat/completions',
+                {
+                    model: 'gpt-4',
+                    messages: [{ role: 'user', content: userQuestion }]
+                },
+                {
+                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
+                }
+            );
+
+            console.log(chalk.green('🧠 AI says:\n'));
+            console.log(response.data.choices[0].message.content);
+        } catch (error) {
+            console.log(chalk.red(`❌ API Error: ${error.response?.data?.error?.message || error.message}`));
+        }
     });
 
 program.parse(process.argv);
