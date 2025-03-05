@@ -24,7 +24,25 @@ function validateGitHubUrl(url) {
     return githubRegex.test(url);
 }
 
-// git maker (initialize repo)
+// helper function to run shell commands
+function runCommand(command) {
+    try {
+        const result = execSync(command, { stdio: 'inherit' });
+        return result.toString();
+    } catch (error) {
+        console.error(chalk.red(`❌ Command failed: ${command}`));
+        console.error(error.message);
+        process.exit(1);  // exit on failure
+    }
+}
+
+// helper function to validate GitHub URL
+function validateGitHubUrl(url) {
+    const gitHubUrlPattern = /^https:\/\/github\.com\/[\w-]+\/[\w-]+$/;
+    return gitHubUrlPattern.test(url);
+}
+
+// git repo here (initialize repo)
 program.command('git repo here')
     .description('Initialize Git and connect to GitHub')
     .action(() => {
@@ -50,30 +68,30 @@ program.command('git repo here')
                 console.log(chalk.green(`✅ Connected to GitHub! Remote set to ${repoUrl}`));
             }
         }
-    });
 
-    // git commit cmd
-program.command('git commit')
-    .description('Commit changes with a custom message and handle .env safely')
-    .action(() => {
-        // ask for commit message
-        const commitMessage = readlineSync.question('📝 Enter commit message: ');
-        if (!commitMessage.trim()) {
-            console.log(chalk.red('❌ Commit message cannot be empty.'));
-            return;
-        }
-
-        // check for .env file and warn user (for people like me)
+        // Check for .env file and warn user
         if (fs.existsSync('.env')) {
-            const confirm = readlineSync.question(chalk.yellow('⚠ Warning: .env contains sensitive info. Add it to .gitignore? (y/n): '));
+            console.log(chalk.yellow('⚠ Warning: Your project contains a .env file, which may contain sensitive information.'));
+            const confirm = readlineSync.question(chalk.yellow('Should we add .env to .gitignore? (y/n): '));
             if (confirm.toLowerCase() === 'y') {
+                // Check if .gitignore exists, create it if not
+                if (!fs.existsSync('.gitignore')) {
+                    fs.writeFileSync('.gitignore', '');
+                }
+                // Add .env to .gitignore
                 fs.appendFileSync('.gitignore', '\n.env\n');
                 console.log(chalk.green('✅ Added .env to .gitignore.'));
+            } else {
+                console.log(chalk.red('❌ It is highly recommended to add .env to .gitignore manually.'));
             }
         }
-        runCommand('git add .');
-        runCommand(`git commit -m "${commitMessage}"`);
-        console.log(chalk.green(`✅ Changes committed: "${commitMessage}"`));
+
+        console.log(chalk.cyan('🎉 Git initialization complete! You can now start committing and pushing to GitHub.'));
+        console.log(chalk.cyan('🚀 Next steps:'));
+        console.log('1. Make changes to your project files.');
+        console.log('2. Stage the changes using `git add .`.');
+        console.log('3. Commit the changes using `git commit -m "Your commit message"`.');
+        console.log('4. Push to GitHub with `git push origin main` (or replace `main` with your branch name).');
     });
 
 // waka
