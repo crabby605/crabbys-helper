@@ -13,62 +13,43 @@ import axios from 'axios';
 // helper function to run shell commands
 function runCommand(command) {
     try {
-        const result = execSync(command, { stdio: 'inherit' });
-        return result.toString();
+        const result = execSync(command, { stdio: 'pipe' });  // changed to 'pipe' to capture output
+        return result.toString();  // ensure result is converted to string
     } catch (error) {
-        console.error(chalk.red(`❌ Command failed: ${command}`));
+        console.error(chalk.red(`❌ command failed: ${command}`));
         console.error(error.message);
-        process.exit(1);
+        return null;  // return null explicitly
     }
 }
-
-// Helper function to validate GitHub repository URL
 function validateGitHubUrl(url) {
-    const gitHubUrlPattern = /^https:\/\/github\.com\/[\w-]+\/[\w-]+$/;
-    return gitHubUrlPattern.test(url);
+    const githubRegex = /^https:\/\/github\.com\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+(\.git)?$/;
+    return githubRegex.test(url);
 }
 
-// git repo initialization and connection to GitHub
-program.command('git repo here')
+program.command('git here')
     .description('Initialize Git and connect to GitHub')
     .action(() => {
         try {
             execSync('git rev-parse --is-inside-work-tree', { stdio: 'ignore' });
-            console.log(chalk.yellow('⚠ Git is already initialized.'));
         } catch {
             runCommand('git init');
             console.log(chalk.green('✅ Git has been initialized!'));
         }
 
+        let remoteUrl;
         try {
-            const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
-            console.log(chalk.yellow(`⚠ Remote already exists: ${remoteUrl}`));
+            remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8' }).trim();
         } catch {
-            const repoUrl = readlineSync.question('🌍 Enter your GitHub repo URL (or leave blank to skip): ');
+            let repoUrl = readlineSync.question('🌍 Enter your GitHub repo URL (or leave blank to skip): ');
+
             if (repoUrl) {
                 if (!validateGitHubUrl(repoUrl)) {
                     console.log(chalk.red('❌ Invalid GitHub repository URL. Please enter a valid URL.'));
                     return;
                 }
-                runCommand(`git remote add origin ${repoUrl}`);
-                console.log(chalk.green(`✅ Connected to GitHub! Remote set to ${repoUrl}`));
-            }
-        }
 
-        // check for .env file and warn user
-        if (fs.existsSync('.env')) {
-            console.log(chalk.yellow('⚠ Warning: Your project contains a .env file, which may contain sensitive information.'));
-            const confirm = readlineSync.question(chalk.yellow('Should we add .env to .gitignore? (y/n): '));
-            if (confirm.toLowerCase() === 'y') {
-                // check if .gitignore exists, create it if not
-                if (!fs.existsSync('.gitignore')) {
-                    fs.writeFileSync('.gitignore', '');
-                }
-                // add .env to .gitignore
-                fs.appendFileSync('.gitignore', '\n.env\n');
-                console.log(chalk.green('✅ Added .env to .gitignore.'));
-            } else {
-                console.log(chalk.red('❌ It is highly recommended to add .env to .gitignore manually.'));
+                runCommand(`git remote add origin ${repoUrl}`);
+                console.log(chalk.green('✅ Connected to GitHub!'));
             }
         }
 
@@ -76,18 +57,20 @@ program.command('git repo here')
         console.log(chalk.cyan('🚀 Next steps:'));
         console.log('1. Make changes to your project files.');
         console.log('2. Stage the changes using `git add .`.');
-        console.log('3. Commit the changes using `git commit -m "Your commit message"`.');
+        console.log('3. Commit the changes using `git commit -m "your commit message"`.');
         console.log('4. Push to GitHub with `git push origin main` (or replace `main` with your branch name).');
+        console.log(chalk.red('⚠ NEVER COMMIT YOUR .ENV FILES!!'));
     });
+
 
 // waka
 program.command('get coding time')
-    .description('Fetch WakaTime coding stats')
+    .description('fetch wakatime coding stats')
     .action(async () => {
         const wakatimeConfigPath = `${os.homedir()}/.wakatime.cfg`;
 
         if (!fs.existsSync(wakatimeConfigPath)) {
-            console.log(chalk.red('❌ WakaTime config not found. Make sure ~/.wakatime.cfg exists.'));
+            console.log(chalk.red('❌ wakatime config not found. make sure ~/.wakatime.cfg exists.'));
             return;
         }
 
@@ -95,14 +78,14 @@ program.command('get coding time')
         const apiKey = config?.settings?.api_key?.trim();
 
         if (!apiKey) {
-            console.log(chalk.red('❌ API key missing in ~/.wakatime.cfg'));
+            console.log(chalk.red('❌ api key missing in ~/.wakatime.cfg'));
             return;
         }
 
         const encodedKey = Buffer.from(`${apiKey}`).toString('base64');
         const url = "https://waka.hackclub.com/api/compat/wakatime/v1/users/current/all_time_since_today";
 
-        console.log(chalk.blue('⌛ Fetching your coding stats...'));
+        console.log(chalk.blue('⌛ fetching your coding stats...'));
 
         try {
             const response = await fetch(url, {
@@ -113,15 +96,15 @@ program.command('get coding time')
             });
 
             if (!response.ok) {
-                console.log(chalk.red(`❌ API Error: ${response.status} ${response.statusText}`));
+                console.log(chalk.red(`❌ api error: ${response.status} ${response.statusText}`));
                 return;
             }
 
             const data = await response.json();
-            console.log(chalk.green('✅ Your coding stats for today:'));
-            console.log(`⏳ Time Tracked: ${data.data.text}`);
+            console.log(chalk.green('✅ your coding stats for today:'));
+            console.log(`⏳ time tracked: ${data.data.text}`);
         } catch (error) {
-            console.log(chalk.red(`❌ Failed to fetch data: ${error.message}`));
+            console.log(chalk.red(`❌ failed to fetch data: ${error.message}`));
         }
     });
 
@@ -138,53 +121,53 @@ function saveTasks(tasks) {
 }
 
 program.command('task list')
-    .description('View all tasks')
+    .description('view all tasks')
     .action(() => {
         const tasks = loadTasks();
         if (tasks.length === 0) {
-            console.log(chalk.yellow('📋 No tasks found.'));
+            console.log(chalk.yellow('📋 no tasks found.'));
         } else {
-            console.log(chalk.blue('📌 Your Tasks:'));
+            console.log(chalk.blue('📌 your tasks:'));
             tasks.forEach((task, index) => console.log(`${index + 1}) ${task}`));
         }
     });
 
 program.command('add task')
-    .description('Add a new task')
+    .description('add a new task')
     .action(() => {
-        const task = readlineSync.question('📝 Enter task: ');
+        const task = readlineSync.question('📝 enter task: ');
         if (!task.trim()) {
-            console.log(chalk.red('❌ Task cannot be empty.'));
+            console.log(chalk.red('❌ task cannot be empty.'));
             return;
         }
         const tasks = loadTasks();
         tasks.push(task);
         saveTasks(tasks);
-        console.log(chalk.green(`✅ Task added: "${task}"`));
+        console.log(chalk.green(`✅ task added: "${task}"`));
     });
 
 program.command('remove task')
-    .description('Remove a task')
+    .description('remove a task')
     .action(() => {
         const tasks = loadTasks();
         if (tasks.length === 0) {
-            console.log(chalk.yellow('❌ No tasks to remove.'));
+            console.log(chalk.yellow('❌ no tasks to remove.'));
             return;
         }
 
-        console.log(chalk.blue('📌 Your Tasks:'));
+        console.log(chalk.blue('📌 your tasks:'));
         tasks.forEach((task, index) => console.log(`${index + 1}) ${task}`));
 
-        const taskIndex = parseInt(readlineSync.question('Enter task number to remove: '), 10) - 1;
+        const taskIndex = parseInt(readlineSync.question('enter task number to remove: '), 10) - 1;
 
         if (taskIndex < 0 || taskIndex >= tasks.length) {
-            console.log(chalk.red('❌ Invalid selection.'));
+            console.log(chalk.red('❌ invalid selection.'));
             return;
         }
 
         const removedTask = tasks.splice(taskIndex, 1);
         saveTasks(tasks);
-        console.log(chalk.green(`✅ Removed task: "${removedTask}"`));
+        console.log(chalk.green(`✅ removed task: "${removedTask}"`));
     });
 
 // ai stuff
@@ -199,31 +182,31 @@ function getApiKey() {
 }
 
 program.command('ask ai')
-    .description('Ask OpenAI a question')
+    .description('ask openai a question')
     .action(async () => {
         let apiKey = getApiKey();
 
         if (!apiKey) {
-            apiKey = readlineSync.question('🔑 Enter your OpenAI API Key: ', { hideEchoBack: true });
+            apiKey = readlineSync.question('🔑 enter your openai api key: ', { hideEchoBack: true });
             if (!apiKey.trim()) {
-                console.log(chalk.red('❌ API Key is required.'));
+                console.log(chalk.red('❌ api key is required.'));
                 return;
             }
 
-            const saveKey = readlineSync.question('💾 Save API key for future use? (y/n): ');
+            const saveKey = readlineSync.question('💾 save api key for future use? (y/n): ');
             if (saveKey.toLowerCase() === 'y') {
                 fs.writeFileSync(aiConfigPath, `[settings]\napi_key=${apiKey}\n`);
-                console.log(chalk.green('✅ API key saved.'));
+                console.log(chalk.green('✅ api key saved.'));
             }
         }
 
-        const userQuestion = readlineSync.question('🤖 What do you want to ask AI?: ');
+        const userQuestion = readlineSync.question('🤖 what do you want to ask ai?: ');
         if (!userQuestion.trim()) {
-            console.log(chalk.red('❌ Question cannot be empty.'));
+            console.log(chalk.red('❌ question cannot be empty.'));
             return;
         }
 
-        console.log(chalk.blue('⌛ Getting AI response...'));
+        console.log(chalk.blue('⌛ getting ai response...'));
 
         try {
             const response = await axios.post(
@@ -237,10 +220,10 @@ program.command('ask ai')
                 }
             );
 
-            console.log(chalk.green('🧠 AI says:\n'));
+            console.log(chalk.green('🧠 ai says:\n'));
             console.log(response.data.choices[0].message.content);
         } catch (error) {
-            console.log(chalk.red(`❌ API Error: ${error.response?.data?.error?.message || error.message}`));
+            console.log(chalk.red(`❌ api error: ${error.response?.data?.error?.message || error.message}`));
         }
     });
 

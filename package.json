@@ -1,6 +1,6 @@
 {
   "name": "crabbys-helper",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "type": "module",
   "description": "A CLI app to help you learn Git and automate basic tasks",
   "main": "index.js",
