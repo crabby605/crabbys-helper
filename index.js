@@ -173,58 +173,184 @@ program.command('remove task')
 // ai stuff
 const aiConfigPath = `${os.homedir()}/.helper-ai.cfg`;
 
-function getApiKey() {
+function getConfig() {
     if (fs.existsSync(aiConfigPath)) {
-        const config = ini.parse(fs.readFileSync(aiConfigPath, 'utf-8'));
-        return config?.settings?.api_key?.trim();
+        return ini.parse(fs.readFileSync(aiConfigPath, 'utf-8'));
     }
-    return null;
+    return { openai: { api_key: '' }, gemini: { api_key: '' }, model: 'openai' };
+}
+
+function saveConfig(config) {
+    fs.writeFileSync(aiConfigPath, ini.stringify(config));
+}
+
+function getApiKey(model) {
+    const config = getConfig();
+    return config[model]?.api_key?.trim() || null;
 }
 
 program.command('ask ai')
-    .description('ask openai a question')
+    .description('Ask an AI model a question')
     .action(async () => {
-        let apiKey = getApiKey();
+        let config = getConfig();
 
-        if (!apiKey) {
-            apiKey = readlineSync.question('🔑 enter your openai api key: ', { hideEchoBack: true });
-            if (!apiKey.trim()) {
-                console.log(chalk.red('❌ api key is required.'));
-                return;
-            }
+        const model = readlineSync.question('🤖 Select AI Model (openai/gemini/deepseek): ', {
+            defaultInput: config.model || 'openai'
+        }).toLowerCase();
 
-            const saveKey = readlineSync.question('💾 save api key for future use? (y/n): ');
-            if (saveKey.toLowerCase() === 'y') {
-                fs.writeFileSync(aiConfigPath, `[settings]\napi_key=${apiKey}\n`);
-                console.log(chalk.green('✅ api key saved.'));
-            }
-        }
-
-        const userQuestion = readlineSync.question('🤖 what do you want to ask ai?: ');
-        if (!userQuestion.trim()) {
-            console.log(chalk.red('❌ question cannot be empty.'));
+        if (!['openai', 'gemini', 'deepseek'].includes(model)) {
+            console.log(chalk.red('❌ Invalid model selection.'));
             return;
         }
 
-        console.log(chalk.blue('⌛ getting ai response...'));
+        if (model !== 'deepseek') {
+            let apiKey = getApiKey(model);
+            if (!apiKey) {
+                apiKey = readlineSync.question(`🔑 Enter your ${model} API key: `, { hideEchoBack: true });
+                if (!apiKey.trim()) {
+                    console.log(chalk.red('❌ API key is required.'));
+                    return;
+                }
+
+                const saveKey = readlineSync.question('💾 Save API key for future use? (y/n): ');
+                if (saveKey.toLowerCase() === 'y') {
+                    config[model] = { api_key: apiKey };
+                    saveConfig(config);
+                    console.log(chalk.green(`✅ ${model} API key saved.`));
+                }
+            }
+        }
+
+        config.model = model;
+        saveConfig(config);
+
+        const userQuestion = readlineSync.question('🤖 What do you want to ask AI?: ');
+        if (!userQuestion.trim()) {
+            console.log(chalk.red('❌ Question cannot be empty.'));
+            return;
+        }
+
+        console.log(chalk.blue('⌛ Getting AI response...'));
 
         try {
-            const response = await axios.post(
-                'https://api.openai.com/v1/chat/completions',
-                {
-                    model: 'gpt-4',
-                    messages: [{ role: 'user', content: userQuestion }]
-                },
-                {
-                    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' }
-                }
-            );
+            let response;
+            if (model === 'openai') {
+                response = await axios.post(
+                    'https://api.openai.com/v1/chat/completions',
+                    { model: 'gpt-4', messages: [{ role: 'user', content: userQuestion }] },
+                    { headers: { 'Authorization': `Bearer ${config.openai.api_key}`, 'Content-Type': 'application/json' } }
+                );
+            } else if (model === 'gemini') {
+                response = await axios.post(
+                    'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateMessage',
+                    { contents: [{ parts: [{ text: userQuestion }] }] },
+                    { headers: { 'Authorization': `Bearer ${config.gemini.api_key}`, 'Content-Type': 'application/json' } }
+                );
+            } else if (model === 'deepseek') {
+                response = await axios.post(
+                    'https://ai.hackclub.com/chat/completions',
+                    { messages: [{ role: 'user', content: userQuestion }] },
+                    { headers: { 'Content-Type': 'application/json' } }
+                );
+            }
 
-            console.log(chalk.green('🧠 ai says:\n'));
-            console.log(response.data.choices[0].message.content);
+            console.log(chalk.green('🧠 AI says:'));
+            console.log(response.data.choices[0].message.content || response.data.candidates[0].content);
         } catch (error) {
-            console.log(chalk.red(`❌ api error: ${error.response?.data?.error?.message || error.message}`));
+            console.log(chalk.red(`❌ API error: ${error.response?.data?.error?.message || error.message}`));
         }
     });
+
+const catState = { food: 5, water: 5, happiness: 5 };
+const MAX_LEVEL = 10;
+const MIN_LEVEL = 0;
+
+function getCatArt() {
+    if (catState.food === 0 || catState.water === 0 || catState.happiness === 0) {
+        return `
+        /\_/\
+       (x_x )  Your cat is sad and weak!
+        > ^ <
+        `;
+    } else if (catState.food <= 2 || catState.water <= 2) {
+        return `
+        /\_/\
+       (o_o )  Your cat looks hungry and thirsty!
+        > ^ <
+        `;
+    } else if (catState.happiness <= 2) {
+        return `
+        /\_/\
+       (-_- )  Your cat is bored and grumpy!
+        > ^ <
+        `;
+    } else {
+        return `
+        /\_/\
+       ( ^_^ ) Your cat is happy and healthy!
+        > ^ <
+        `;
+    }
+}
+
+function updateCatStatus() {
+    catState.food = Math.max(MIN_LEVEL, catState.food + 1);
+    catState.water = Math.max(MIN_LEVEL, catState.water + 1);
+    catState.happiness = Math.max(MIN_LEVEL, catState.happiness + 1);
+
+    console.clear();
+    console.log(`🐱 Your Cat's Status 🐱`);
+    console.log(`🍖 Food: ${catState.food}/${MAX_LEVEL}`);
+    console.log(`💧 Water: ${catState.water}/${MAX_LEVEL}`);
+    console.log(`🎉 Happiness: ${catState.happiness}/${MAX_LEVEL}`);
+    console.log(getCatArt());
+
+    if (catState.food === 0 || catState.water === 0 || catState.happiness === 0) {
+        console.log(chalk.red('💀 Your cat is not doing well! Take care of it!'));
+    }
+}
+
+program.command('cat game')
+    .description('Take care of your ASCII cat')
+    .action(() => {
+        updateCatStatus();
+        setInterval(updateCatStatus, 5000);
+
+        while (true) {
+            const action = readlineSync.question('What do you want to do? (F)eed, (W)ater, (P)lay, (Q)uit: ').toLowerCase();
+            if (action === 'q') break;
+
+            switch (action) {
+                case 'f':
+                    if (catState.food <= MIN_LEVEL) {
+                        console.log(chalk.yellow('⚠ Your cat is too full! It refuses to eat.'));
+                    } else {
+                        catState.food--;
+                        console.log(chalk.green('✅ You fed your cat!'));
+                    }
+                    break;
+                case 'w':
+                    if (catState.water <= MIN_LEVEL) {
+                        console.log(chalk.yellow('⚠ Your cat is too hydrated! No need for more water.'));
+                    } else {
+                        catState.water--;
+                        console.log(chalk.green('✅ You gave your cat water!'));
+                    }
+                    break;
+                case 'p':
+                    if (catState.happiness <= MIN_LEVEL) {
+                        console.log(chalk.yellow('⚠ Your cat is too exhausted to play. Let it rest.'));
+                    } else {
+                        catState.happiness--;
+                        console.log(chalk.green('✅ You played with your cat!'));
+                    }
+                    break;
+                default:
+                    console.log(chalk.red('❌ Invalid action. Try again.'));
+            }
+            updateCatStatus();
+        }
+    });
+
 
 program.parse(process.argv);
